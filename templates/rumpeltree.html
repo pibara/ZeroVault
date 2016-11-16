@@ -1,0 +1,87 @@
+<HTML>
+<HEAD>
+<TITLE>ZeroVault</TITLE>
+<script src="./blake2s.min.js"></script>
+<script>
+function str2ab(str) {
+  var buf = new ArrayBuffer(str.length);
+  var bufView = new Uint8Array(buf);
+  for (var i=0, strLen=str.length; i<strLen; i++) {
+    bufView[i] = str.charCodeAt(i);
+  }
+  return bufView;
+}  
+
+function d2u(digest) {
+  var dicts = ["bcdfghjklmnpqrstvwxz","aeiouy","0123456789"];
+  var pwt = [0,1,0,0,1,0,1,0,0,1,0,2,2,2];
+  var arrayLength = pwt.length;
+  rval = "";
+  for (var i = 0; i < arrayLength; i++) {
+    var dictionary = dicts[pwt[i]];
+    var dictionaryLength = dictionary.length;
+    var num = digest[i] % dictionaryLength;
+    var chr = dictionary[num];
+    rval += chr;
+  }
+  return rval;
+}
+
+function d2s(digest) {
+  var dictionary = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.?/:|[]{}+=-_()*&^%$#@!~".split("");
+  var dictionaryLength = dictionary.length;
+  var arrayLength = digest.length;
+  rval = "";
+  for (var i = 0; i < arrayLength; i++) {
+     var num = digest[i] % dictionaryLength;
+     var chr = dictionary[num];
+     rval += chr;
+  }
+  return rval;
+}
+
+function calcPassword(e) {
+  var rootkey = str2ab(document.getElementById('rumpelroot').value.slice(-32));
+  var gpass = document.getElementById('pwd').value;
+  var domain = document.getElementById('domain').value;
+  var user = document.getElementById('user').value;
+  var gkey = new BLAKE2s(32, rootkey).update(str2ab(gpass));
+  var dkey = new BLAKE2s(32, gkey.digest()).update(str2ab(domain));
+  var ukey = new BLAKE2s(32, dkey.digest()).update(str2ab(user));
+  var pass = d2s(ukey.digest());
+  document.getElementById('result').value = pass;
+}
+
+function calcUsername(e) {
+  var rootkey = str2ab(document.getElementById('rumpelroot').value.slice(0,32));
+  var domain = document.getElementById('domain').value;
+  var gkey = new BLAKE2s(32, rootkey).update(str2ab(domain));
+  var user = d2u(gkey.digest());
+  document.getElementById('user').value = user;
+}
+
+
+</script>
+</HEAD>
+<BODY>
+<center>
+<H3>ZeroVault</H3>
+Welcome to your personal ZeroVault.<br>
+<img src="vault.jpg"><br><br>
+<form>
+<input type="hidden" value="{{rumpelroot}}" id="rumpelroot">
+<table border="0">
+<tr><td>Domain</td><td><input type="text" name="domain" id="domain"></td><td></td></tr>
+<tr><td>Username</td><td><input type="text" name="user" id="user"></td>
+<td><input type="button" value="Auto Username" onclick="calcUsername()"></td></tr>
+<tr><td>Generator Passphrase</td><td colspan="2"><input type="password" size="40" name="pwd" id ="pwd"></td></tr>
+</table>
+<input type="button" value="Calculate" onclick="calcPassword()">
+</form> 
+<h3>Password:</h3>
+<input type="text" id="result" size ="32">
+<hr><font size="-1"><i>Please take proper precausions to assure the secrecy of your usage of ZeroVault.<br>
+The ZeroVault source code is available <A HREF="">here</A></i></font>
+</center>
+</BODY>
+</HTML>
