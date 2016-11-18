@@ -7,6 +7,7 @@ import base64
 import hmac
 import hashlib
 import datetime
+import json
 #CHANGE THIS SALT WHEN INSTALLED ON YOUR PERSONAL SERVER!
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 print "Content-type: text/html"
@@ -31,8 +32,25 @@ if "HTTPS" in os.environ:
     print
     cookie = Cookie.SimpleCookie(os.environ["HTTP_COOKIE"])
     rumpelroot = cookie["rumpelroot"].value
+    rumpelsub = base64.b32encode(hmac.new(serversalt,
+                        rumpelroot,
+                        digestmod=hashlib.sha256).digest()).strip("=") 
+    revocationjsonfile = "../revoked/" + rumpelsub + ".json"
+    revocationlist = []
+    if (os.path.exists(revocationjsonfile)):
+        with open(revocationjsonfile) as data_file:    
+            revocationlist = json.load(data_file)
+    form = cgi.FieldStorage()
+    revocekey = "NONE"
+    if "revocationkey" in form:
+       revocekey = form["revocationkey"].value
+       if len(revocekey) == 32  :
+           revocationlist.append(revocekey)
+           with open(revocationjsonfile, 'w') as outfile:
+               json.dump(revocationlist, outfile)       
     context = {
-        'rumpelroot': rumpelroot
+        'rumpelroot': rumpelroot,
+        'revocationlist': revocationlist
     }
     html = render_template('rumpeltree.html',context)
   else:

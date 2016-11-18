@@ -12,43 +12,61 @@ function str2ab(str) {
   return bufView;
 }  
 
-function d2u(digest) {
-  var dicts = ["bcdfghjklmnpqrstvwxz","aeiouy","0123456789"];
-  var pwt = [0,1,0,0,1,0,1,0,0,1,0,2,2,2];
-  var arrayLength = pwt.length;
-  rval = "";
-  for (var i = 0; i < arrayLength; i++) {
-    var dictionary = dicts[pwt[i]];
-    var dictionaryLength = dictionary.length;
-    var num = digest[i] % dictionaryLength;
-    var chr = dictionary[num];
-    rval += chr;
+function d2s(digest,dousername,domain) {
+  var minfo = {% include "mapping.json" %} ;
+  var dinfo = minfo.domains[domain] || minfo.domains["DEFAULT"];
+  var mapping;
+  if (dousername) {
+     mapping = minfo.mappings[dinfo["username"]];
+  } else {
+     mapping = minfo.mappings[dinfo["password"]];
+  };
+  var alphabets = [];
+  var ablen = mapping.alphabets.length;
+  for (var i = 0; i< ablen ; i++) {
+      alphabets.push(minfo.alphabets[mapping.alphabets[i]]);
   }
-  return rval;
-}
-
-function d2s(digest) {
-  var dictionary = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.?/:|[]{}+=-_()*&^%$#@!~".split("");
-  var dictionaryLength = dictionary.length;
-  var arrayLength = digest.length;
-  rval = "";
+  var structure = mapping.structure
+  var arrayLength = structure.length
+  if (arrayLength > 32) {
+     arrayLength = 32;
+  }
+  rval ="";
   for (var i = 0; i < arrayLength; i++) {
-     var num = digest[i] % dictionaryLength;
-     var chr = dictionary[num];
+     var alphabet = alphabets[parseInt(structure[i])];
+     var alphabetLength = alphabet.length;
+     var num = digest[i] % alphabetLength;
+     var chr = alphabet[num];
      rval += chr;
-  }
+  }   
   return rval;
 }
 
 function calcPassword(e) {
+  var revoked = { {% for result in revocationlist %} "{{result}}" : true ,{% endfor %} };
+  var incomplete = true;
   var rootkey = str2ab(document.getElementById('rumpelroot').value.slice(-32));
   var gpass = document.getElementById('pwd').value;
   var domain = document.getElementById('domain').value;
   var user = document.getElementById('user').value;
-  var gkey = new BLAKE2s(32, rootkey).update(str2ab(gpass));
-  var dkey = new BLAKE2s(32, gkey.digest()).update(str2ab(domain));
-  var ukey = new BLAKE2s(32, dkey.digest()).update(str2ab(user));
-  var pass = d2s(ukey.digest());
+  var rkey = rootkey;
+  while (incomplete === true) {
+      var gkey = new BLAKE2s(32, rkey).update(str2ab(gpass));
+      var dkey = new BLAKE2s(32, gkey.digest()).update(str2ab(domain));
+      var ukey = new BLAKE2s(32, dkey.digest()).update(str2ab(user));
+      var rvkey = new BLAKE2s(32, ukey.digest()).update(str2ab("RevocationToken"));
+      var rkey = rvkey.digest();
+      var rtoken = d2s(rkey,false,domain);
+      var isrevoked = revoked[rtoken];
+      incomplete = false;
+      if (isrevoked === true) {
+         console.log(rtoken)
+         incomplete = true;
+      } else {
+         document.getElementById('revocationkey').value = rtoken; 
+      }
+  }
+  var pass = d2s(ukey.digest(),false,domain);
   document.getElementById('result').value = pass;
 }
 
@@ -56,7 +74,7 @@ function calcUsername(e) {
   var rootkey = str2ab(document.getElementById('rumpelroot').value.slice(0,32));
   var domain = document.getElementById('domain').value;
   var gkey = new BLAKE2s(32, rootkey).update(str2ab(domain));
-  var user = d2u(gkey.digest());
+  var user = d2s(gkey.digest(),true,domain);
   document.getElementById('user').value = user;
 }
 
@@ -80,6 +98,11 @@ Welcome to your personal ZeroVault.<br>
 </form> 
 <h3>Password:</h3>
 <input type="text" id="result" size ="32">
+<h3>Incident Response</h3>
+<form action="/" method="post">
+<input type="hidden" id="revocationkey" name="revocationkey" value="">
+<input type="submit" value="Mark above password as compromised">
+</form>
 <hr><font size="-1"><i>Please take proper precausions to assure the secrecy of your usage of ZeroVault.<br>
 The ZeroVault source code is available <A HREF="https://github.com/pibara/ZeroVault">here</A></i></font>
 </center>

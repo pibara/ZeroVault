@@ -1,0 +1,48 @@
+{ 
+    "alphabets" : {
+        "la" : "abcdefghijklmnopqrstuvwxyz",
+        "ua" : "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "ln" : "abcdefghijklmnopqrstuvwxyz0123456789",
+        "un" : "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        "an" : "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        "lc" : "bcdfghjklmnpqrstvwxz",
+        "uc" : "BCDFGHJKLMNPQRSTVWXZ",
+        "xc" : "bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ",
+        "lv" : "aeiouy",
+        "uv" : "AEIOUY",
+        "xv" : "aeiouyAEIOUY",
+        "nm" : "0123456789",
+        "mx" : "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.?/:|[]{}+=-_()*&^%$#@!~",
+        "lx" : "abcdefghijklmnopqrstuvwxyz0123456789,.?/:|[]{}+=-_()*&^%$#@!~",
+        "ux" : "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.?/:|[]{}+=-_()*&^%$#@!~",
+        "na" : ",.?/:|[]{}+=-_()*&^%$#@!~"
+    },
+    "mappings" : {
+        "user001" : {
+            "alphabets" : ["lc","lv","nm"],
+            "structure" : "01001010010222"
+        },
+        "user002" : { 
+            "alphabets" : ["uc","lv","an","nm","na"],
+            "structure" : "0133322222222224"
+        },
+        "pass001" : {
+            "alphabets" : ["mx"],
+            "structure" : "00000000000000000000000000000000"
+        },
+        "pass002" : {
+            "alphabets" : ["mx","ua"],
+            "structure" : "10000000000000000000000000000000"
+        }
+    },
+    "domains" : {
+        "DEFAULT" : {
+            "username" : "user001",
+            "password" : "pass001"
+        },
+        "capibara.com" : {
+            "username" : "user002",
+            "password" : "pass002"
+        }
+    }
+  }
