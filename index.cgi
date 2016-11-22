@@ -1,5 +1,4 @@
 #!/usr/bin/python
-import jinja2
 import os
 import Cookie
 import cgi
@@ -9,18 +8,23 @@ import hashlib
 import datetime
 import json
 
+from jinja2 import Environment
+
 # CHANGE THIS SALT WHEN INSTALLED ON YOUR PERSONAL SERVER!
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
-path = os.path.dirname(os.path.abspath(__file__))
-templateEnv = jinja2.Environment(
-    autoescape=False,
-    loader=jinja2.FileSystemLoader(os.path.join(path, 'templates')),
-    trim_blocks=False)
 
-
-def main(stdout, environ):
+def main(stdout, environ, FileSystemLoader):
     print >>stdout, "Content-type: text/html"
+
+    path = os.path.dirname(os.path.abspath(__file__))
+    templateEnv = Environment(
+        autoescape=False,
+        loader=FileSystemLoader(os.path.join(path, 'templates')),
+        trim_blocks=False)
+
+    def render_template(template_filename, context):
+        return templateEnv.get_template(template_filename).render(context)
 
     servername = None
     if "SERVER_NAME" in environ:
@@ -88,16 +92,13 @@ def main(stdout, environ):
     print >>stdout, html
 
 
-def render_template(template_filename, context):
-    global templateEnv
-    return templateEnv.get_template(template_filename).render(context)
-
-
 if __name__ == '__main__':
     def _script():
         from os import environ
         from sys import stdout
 
-        main(stdout, environ)
+        from jinja2 import FileSystemLoader
+
+        main(stdout, environ, FileSystemLoader)
 
     _script()
