@@ -1,4 +1,16 @@
 #!/usr/bin/python
+'''
+
+>>> io = MockIO()
+>>> cwd = Path('.', io.ops())
+>>> main(io.stdout, io.environ, cwd, io.now, io.FileSystemLoader)
+
+>>> print io.stdout.getvalue()
+Content-type: text/html
+<BLANKLINE>
+This is your first visit to your ZeroVault
+<BLANKLINE>
+'''
 from datetime import timedelta
 import Cookie
 import base64
@@ -113,6 +125,40 @@ class Path(object):
 
     def __div__(self, other):
         return self.pathjoin(other)
+
+
+class MockIO(object):
+    environ = dict(SERVER_NAME='host.example',
+                   HTTPS='1')
+
+    def __init__(self):
+        from io import BytesIO
+        self.stdout = BytesIO()
+
+    def ops(self):
+        from posixpath import abspath, dirname, join as pathjoin
+        from io import BytesIO, StringIO
+
+        def exists(p):
+            return False
+
+        def io_open(p, mode):
+            return BytesIO() if 'b' in mode else StringIO()
+        return abspath, dirname, pathjoin, exists, io_open
+
+    def now(self):
+        import datetime
+        return datetime.datetime(2001, 1, 1)
+
+    def FileSystemLoader(self, path):
+        # kludge
+        return self
+
+    def load(self, env, tpl, context):
+        return self
+
+    def render(self, context):
+        return 'This is your first visit to your ZeroVault'
 
 
 if __name__ == '__main__':
