@@ -6,7 +6,6 @@ import cgi
 import hashlib
 import hmac
 import json
-import os
 
 from jinja2 import Environment
 
@@ -14,13 +13,13 @@ from jinja2 import Environment
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
 
-def main(stdout, environ, now, FileSystemLoader):
+def main(stdout, environ, cwd, now, FileSystemLoader):
     print >>stdout, "Content-type: text/html"
 
-    path = os.path.dirname(os.path.abspath(__file__))
+    path = (cwd / __file__).resolve().parent
     templateEnv = Environment(
         autoescape=False,
-        loader=FileSystemLoader(os.path.join(path, 'templates')),
+        loader=FileSystemLoader(str(path / 'templates')),
         trim_blocks=False)
 
     def render_template(template_filename, context):
@@ -44,10 +43,10 @@ def main(stdout, environ, now, FileSystemLoader):
                 serversalt,
                 rumpelroot,
                 digestmod=hashlib.sha256).digest()).strip("=")
-            revocationjsonfile = "../revoked/" + rumpelsub + ".json"
+            revocationjsonfile = (cwd / ("../revoked/" + rumpelsub + ".json"))
             revocationlist = []
-            if (os.path.exists(revocationjsonfile)):
-                with open(revocationjsonfile) as data_file:
+            if (revocationjsonfile.exists()):
+                with revocationjsonfile.open(mode='rb') as data_file:
                     revocationlist = json.load(data_file)
             form = cgi.FieldStorage()
             revocekey = "NONE"
@@ -55,7 +54,7 @@ def main(stdout, environ, now, FileSystemLoader):
                 revocekey = form["revocationkey"].value
                 if len(revocekey) == 32:
                     revocationlist.append(revocekey)
-                    with open(revocationjsonfile, 'w') as outfile:
+                    with revocationjsonfile.open(mode='wb') as outfile:
                         json.dump(revocationlist, outfile)
             context = {
                 'rumpelroot': rumpelroot,
@@ -91,14 +90,45 @@ def main(stdout, environ, now, FileSystemLoader):
     print >>stdout, html
 
 
+class Path(object):
+    '''pathlib style file API
+
+    ref https://pypi.python.org/pypi/pathlib2/
+    '''
+    def __init__(self, path, ops):
+        self._path = path
+        abspath, dirname, pathjoin, exists, io_open = ops
+        self.resolve = lambda: Path(abspath(path), ops)
+        self.pathjoin = lambda other: Path(pathjoin(path, other), ops)
+        self._parent = lambda: Path(dirname(path), ops)
+        self.exists = lambda: exists(path)
+        self.open = lambda mode='r': io_open(path, mode=mode)
+
+    @property
+    def parent(self):
+        return self._parent()
+
+    def __str__(self):
+        return self._path
+
+    def __div__(self, other):
+        return self.pathjoin(other)
+
+
 if __name__ == '__main__':
     def _script():
-        from os import environ
-        from sys import stdout
+        '''Access to ambient authority derives
+        from invocation as a script.
+        '''
         from datetime import datetime
+        from io import open as io_open
+        from os import environ
+        from os.path import abspath, dirname, join as pathjoin, exists
+        from sys import stdout
 
         from jinja2 import FileSystemLoader
 
-        main(stdout, environ, datetime.now, FileSystemLoader)
+        cwd = Path('.', (abspath, dirname, pathjoin, exists, io_open))
+        main(stdout, environ, cwd, datetime.now, FileSystemLoader)
 
     _script()
