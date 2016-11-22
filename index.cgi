@@ -18,8 +18,8 @@ templateEnv = jinja2.Environment(
     trim_blocks=False)
 
 
-def main():
-    print "Content-type: text/html"
+def main(stdout):
+    print >>stdout, "Content-type: text/html"
 
     servername = None
     if "SERVER_NAME" in os.environ:
@@ -29,7 +29,7 @@ def main():
         html ="<H2>OOPS</H2>Broken server setup. No SERVER_NAME set."
     if "HTTPS" in os.environ:
       if "HTTP_COOKIE" in os.environ:
-        print
+        print >>stdout
         cookie = Cookie.SimpleCookie(os.environ["HTTP_COOKIE"])
         rumpelroot = cookie["rumpelroot"].value
         rumpelsub = base64.b32encode(hmac.new(serversalt,
@@ -65,19 +65,19 @@ def main():
             cookie["rumpelroot"]["path"] = "/"
             expiration = datetime.datetime.now() + datetime.timedelta(days=365*20) 
             cookie["rumpelroot"]["expires"] = expiration.strftime("%a, %d-%b-%Y %H:%M:%S PST")
-            print cookie.output()
-            print
+            print >>stdout, cookie.output()
+            print >>stdout
             context = {
               'rumpelroot': rumpelroot
             }
             html = render_template('rumpeltree.html',context)
         else:
-            print
+            print >>stdout
             context = {}
             html = render_template('passwordform.html',context)
     else:
-      print
-    print html
+      print >>stdout
+    print >>stdout, html
 
 
 def render_template(template_filename, context):
@@ -86,4 +86,9 @@ def render_template(template_filename, context):
 
 
 if __name__ == '__main__':
-    main()
+    def _script():
+        from sys import stdout
+
+        main(stdout)
+
+    _script()
