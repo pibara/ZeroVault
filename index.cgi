@@ -1,8 +1,8 @@
 #!/usr/bin/python
+from datetime import timedelta
 import Cookie
 import base64
 import cgi
-import datetime
 import hashlib
 import hmac
 import json
@@ -14,7 +14,7 @@ from jinja2 import Environment
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
 
-def main(stdout, environ, FileSystemLoader):
+def main(stdout, environ, now, FileSystemLoader):
     print >>stdout, "Content-type: text/html"
 
     path = os.path.dirname(os.path.abspath(__file__))
@@ -73,8 +73,7 @@ def main(stdout, environ, FileSystemLoader):
                 cookie["rumpelroot"] = rumpelroot
                 cookie["rumpelroot"]["domain"] = "password.capibara.com"
                 cookie["rumpelroot"]["path"] = "/"
-                expiration = datetime.datetime.now() + datetime.timedelta(
-                    days=365 * 20)
+                expiration = now() + timedelta(days=365 * 20)
                 cookie["rumpelroot"]["expires"] = expiration.strftime(
                     "%a, %d-%b-%Y %H:%M:%S PST")
                 print >>stdout, cookie.output()
@@ -96,9 +95,10 @@ if __name__ == '__main__':
     def _script():
         from os import environ
         from sys import stdout
+        from datetime import datetime
 
         from jinja2 import FileSystemLoader
 
-        main(stdout, environ, FileSystemLoader)
+        main(stdout, environ, datetime.now, FileSystemLoader)
 
     _script()
