@@ -19,22 +19,22 @@ templateEnv = jinja2.Environment(
     trim_blocks=False)
 
 
-def main(stdout):
+def main(stdout, environ):
     print >>stdout, "Content-type: text/html"
 
     servername = None
-    if "SERVER_NAME" in os.environ:
-        servername = os.environ["SERVER_NAME"]
+    if "SERVER_NAME" in environ:
+        servername = environ["SERVER_NAME"]
         html = ("<H2>OOPS</H2><b>YOU SHOULD NEVER</b> access ZeroVault "
                 "over a <b>UNENCRYPTED</b> connection!<br>"
                 "Please visit the <A HREF=\"https://" +
                 servername + "/\">HTTPS site</A>!")
     else:
         html = "<H2>OOPS</H2>Broken server setup. No SERVER_NAME set."
-    if "HTTPS" in os.environ:
-        if "HTTP_COOKIE" in os.environ:
+    if "HTTPS" in environ:
+        if "HTTP_COOKIE" in environ:
             print >>stdout
-            cookie = Cookie.SimpleCookie(os.environ["HTTP_COOKIE"])
+            cookie = Cookie.SimpleCookie(environ["HTTP_COOKIE"])
             rumpelroot = cookie["rumpelroot"].value
             rumpelsub = base64.b32encode(hmac.new(
                 serversalt,
@@ -95,8 +95,9 @@ def render_template(template_filename, context):
 
 if __name__ == '__main__':
     def _script():
+        from os import environ
         from sys import stdout
 
-        main(stdout)
+        main(stdout, environ)
 
     _script()
