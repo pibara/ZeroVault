@@ -54,7 +54,7 @@ def main(stdin, stdout, environ, cwd, now, FileSystemLoader):
     else:
         reply_header(stdout)
         context = vault_context(environ["HTTP_COOKIE"],
-                                cwd.parent / "revoked",
+                                cwd.resolve().parent / "revoked",
                                 form.getfirst("revocationkey"))
         html = get_template('rumpeltree.html').render(context)
     print >>stdout, html
