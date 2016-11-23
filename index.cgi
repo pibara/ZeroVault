@@ -1,14 +1,20 @@
 #!/usr/bin/python
 '''
 
->>> io = MockIO()
+>>> environ=dict(HTTPS='1',
+...              SERVER_NAME='host.example',
+...              REQUEST_METHOD='POST')
+>>> io = MockIO(stdin='password=sekret')
 >>> cwd = Path('.', io.ops())
->>> main(io.stdout, io.environ, cwd, io.now, io.FileSystemLoader)
+
+>>> main(io.stdin, io.stdout, environ, cwd, io.now, io.FileSystemLoader)
 
 >>> print io.stdout.getvalue()
+... # doctest: +ELLIPSIS
 Content-type: text/html
+Set-Cookie: rumpelroot=...
 <BLANKLINE>
-This is your first visit to your ZeroVault
+... render rumpeltree.html with {'rumpelroot': 'KEM...'}
 <BLANKLINE>
 '''
 from datetime import timedelta
@@ -25,7 +31,7 @@ from jinja2 import Environment
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
 
-def main(stdout, environ, cwd, now, FileSystemLoader):
+def main(stdin, stdout, environ, cwd, now, FileSystemLoader):
     print >>stdout, "Content-type: text/html"
 
     path = (cwd / __file__).resolve().parent
@@ -60,7 +66,7 @@ def main(stdout, environ, cwd, now, FileSystemLoader):
             if (revocationjsonfile.exists()):
                 with revocationjsonfile.open(mode='rb') as data_file:
                     revocationlist = json.load(data_file)
-            form = cgi.FieldStorage()
+            form = cgi.FieldStorage(fp=stdin, environ=environ)
             revocekey = "NONE"
             if "revocationkey" in form:
                 revocekey = form["revocationkey"].value
@@ -74,7 +80,7 @@ def main(stdout, environ, cwd, now, FileSystemLoader):
             }
             html = render_template('rumpeltree.html', context)
         else:
-            form = cgi.FieldStorage()
+            form = cgi.FieldStorage(fp=stdin, environ=environ)
             if "password" in form:
                 rumpelroot = base64.b32encode(hmac.new(
                     serversalt,
@@ -128,12 +134,11 @@ class Path(object):
 
 
 class MockIO(object):
-    environ = dict(SERVER_NAME='host.example',
-                   HTTPS='1')
-
-    def __init__(self):
+    def __init__(self, stdin=''):
         from io import BytesIO
+        self.stdin = BytesIO(stdin)
         self.stdout = BytesIO()
+        self._tpl = None
 
     def ops(self):
         from posixpath import abspath, dirname, join as pathjoin
@@ -155,10 +160,11 @@ class MockIO(object):
         return self
 
     def load(self, env, tpl, context):
+        self._tpl = tpl
         return self
 
     def render(self, context):
-        return 'This is your first visit to your ZeroVault'
+        return '... render %s with %s' % (self._tpl, context)
 
 
 if __name__ == '__main__':
@@ -170,11 +176,11 @@ if __name__ == '__main__':
         from io import open as io_open
         from os import environ
         from os.path import abspath, dirname, join as pathjoin, exists
-        from sys import stdout
+        from sys import stdin, stdout
 
         from jinja2 import FileSystemLoader
 
         cwd = Path('.', (abspath, dirname, pathjoin, exists, io_open))
-        main(stdout, environ, cwd, datetime.now, FileSystemLoader)
+        main(stdin, stdout, environ, cwd, datetime.now, FileSystemLoader)
 
     _script()
