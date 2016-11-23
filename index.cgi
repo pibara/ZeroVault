@@ -30,10 +30,8 @@ serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
 
 def main(stdin, stdout, environ, cwd, now, FileSystemLoader):
-    print >>stdout, "Content-type: text/html"
-
     if "HTTPS" not in environ:
-        print >>stdout
+        reply_header(stdout, status=403)
         print >>stdout, err_unencrypted(environ.get('SERVERNAME'))
         return
 
@@ -46,16 +44,15 @@ def main(stdin, stdout, environ, cwd, now, FileSystemLoader):
     form = cgi.FieldStorage(fp=stdin, environ=environ)
     if "HTTP_COOKIE" not in environ:
         if "password" not in form:
-            print >>stdout
+            reply_header(stdout)
             context = {}
             html = get_template('passwordform.html').render(context)
         else:
             set_cookie, context = set_password(form["password"].value, now())
-            print >>stdout, set_cookie
-            print >>stdout
+            reply_header(stdout, header=set_cookie)
             html = get_template('rumpeltree.html').render(context)
     else:
-        print >>stdout
+        reply_header(stdout)
         context = vault_context(environ["HTTP_COOKIE"],
                                 cwd.parent / "revoked",
                                 form.getfirst("revocationkey"))
@@ -139,6 +136,16 @@ def vault_context(http_cookie, revocationdir, revocationkey):
         'revocationlist': revocationlist
     }
     return context
+
+
+def reply_header(stdout, header=None, status=None):
+    if status:
+        print >>stdout, 'Status:', status
+    print >>stdout, "Content-type: text/html"
+    if header:
+        print >>stdout, header
+
+    print >>stdout
 
 
 def err_unencrypted(servername):
