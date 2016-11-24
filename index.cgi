@@ -1,14 +1,18 @@
 #!/usr/bin/python
 '''
 
->>> io = MockIO()
+>>> environ=dict(HTTPS='1', REQUEST_METHOD='POST')
+>>> io = MockIO(stdin='password=sekret')
 >>> cwd = Path('.', io.ops())
->>> main(io.stdout, io.environ, cwd, io.now, io.FileSystemLoader)
+
+>>> main(io.stdin, io.stdout, environ, cwd, io.now, io.FileSystemLoader)
 
 >>> print io.stdout.getvalue()
+... # doctest: +ELLIPSIS
 Content-type: text/html
+Set-Cookie: rumpelroot=...
 <BLANKLINE>
-This is your first visit to your ZeroVault
+... render rumpeltree.html with {'rumpelroot': 'KEM...'}
 <BLANKLINE>
 '''
 from datetime import timedelta
@@ -25,81 +29,134 @@ from jinja2 import Environment
 serversalt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP"
 
 
-def main(stdout, environ, cwd, now, FileSystemLoader):
-    print >>stdout, "Content-type: text/html"
+def main(stdin, stdout, environ, cwd, now, FileSystemLoader):
+    if "HTTPS" not in environ:
+        reply_header(stdout, status=403)
+        print >>stdout, err_unencrypted(environ.get('SERVERNAME'))
+        return
 
-    path = (cwd / __file__).resolve().parent
-    templateEnv = Environment(
+    templates = (cwd / __file__).resolve().parent / 'templates'
+    get_template = Environment(
         autoescape=False,
-        loader=FileSystemLoader(str(path / 'templates')),
-        trim_blocks=False)
+        loader=FileSystemLoader(str(templates)),
+        trim_blocks=False).get_template
 
-    def render_template(template_filename, context):
-        return templateEnv.get_template(template_filename).render(context)
+    form = cgi.FieldStorage(fp=stdin, environ=environ)
+    if "HTTP_COOKIE" not in environ:
+        if "password" not in form:
+            reply_header(stdout)
+            context = {}
+            html = get_template('passwordform.html').render(context)
+        else:
+            set_cookie, context = set_password(form["password"].value, now())
+            reply_header(stdout, header=set_cookie)
+            html = get_template('rumpeltree.html').render(context)
+    else:
+        reply_header(stdout)
+        context = vault_context(environ["HTTP_COOKIE"],
+                                cwd.resolve().parent / "revoked",
+                                form.getfirst("revocationkey"))
+        html = get_template('rumpeltree.html').render(context)
+    print >>stdout, html
 
-    servername = None
-    if "SERVER_NAME" in environ:
-        servername = environ["SERVER_NAME"]
+
+def set_password(password, t0):
+    '''Build cookie header, template context for a new password.
+
+    >>> header, ctx = set_password('sekret', MockIO().now())
+    >>> header
+    ... # doctest: +ELLIPSIS
+    'Set-Cookie: rumpelroot=KEM...; Domain=pass...; expires=...2020...; Path=/'
+    >>> ctx
+    {'rumpelroot': 'KEM23BBQKBRTKNKY4KVEQ465DKYI26FWEDY3HZGCFXOXBJCSYSNA'}
+    '''
+    rumpelroot = base64.b32encode(hmac.new(
+        serversalt,
+        msg=password,
+        digestmod=hashlib.sha256).digest()).strip("=")
+    cookie = Cookie.SimpleCookie()
+    cookie["rumpelroot"] = rumpelroot
+    cookie["rumpelroot"]["domain"] = "password.capibara.com"
+    cookie["rumpelroot"]["path"] = "/"
+    expiration = t0 + timedelta(days=365 * 20)
+    cookie["rumpelroot"]["expires"] = expiration.strftime(
+        "%a, %d-%b-%Y %H:%M:%S PST")
+    context = {
+      'rumpelroot': rumpelroot
+    }
+    return cookie.output(), context
+
+
+def vault_context(http_cookie, revocationdir, revocationkey):
+    '''Recover root from cookie and handle revocation.
+
+    Suppose our visitor has set a password:
+
+    >>> io = MockIO()
+    >>> http_cookie, _ctx = set_password('sekret', MockIO().now())
+
+    Ordinary case:
+
+    >>> vault_context(http_cookie, Path('/r', io.ops()), None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    {'revocationlist': [],
+     'rumpelroot': 'KEM23BBQKBRTKNKY4KVEQ465DKYI26FWEDY3HZGCFXOXBJCSYSNA'}
+    >>> io.existing.keys()
+    []
+
+    Incident response:
+
+    >>> key = '12345678901234567890123456789012'
+    >>> vault_context(http_cookie, Path('/r', io.ops()), key)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    {'revocationlist': ['12345678901234567890123456789012'],
+     'rumpelroot': 'KEM23BBQKBRTKNKY4KVEQ465DKYI26FWEDY3HZGCFXOXBJCSYSNA'}
+    >>> io.existing.keys()
+    ['/r/YUKL3QIGJ3HAGAPERA2NYK32M6QZYZI2IBRTNQTTVLMOKD7WX6DA.json']
+
+    '''
+    cookie = Cookie.SimpleCookie(http_cookie)
+    rumpelroot = cookie["rumpelroot"].value
+    rumpelsub = base64.b32encode(hmac.new(
+        serversalt,
+        rumpelroot,
+        digestmod=hashlib.sha256).digest()).strip("=")
+    revocationjsonfile = revocationdir / (rumpelsub + ".json")
+    revocationlist = []
+    if (revocationjsonfile.exists()):
+        with revocationjsonfile.open(mode='rb') as data_file:
+            revocationlist = json.load(data_file)
+    if revocationkey is not None:
+        if len(revocationkey) == 32:
+            revocationlist.append(revocationkey)
+            with revocationjsonfile.open(mode='wb') as outfile:
+                json.dump(revocationlist, outfile)
+    context = {
+        'rumpelroot': rumpelroot,
+        'revocationlist': revocationlist
+    }
+    return context
+
+
+def reply_header(stdout, header=None, status=None):
+    if status:
+        print >>stdout, 'Status:', status
+    print >>stdout, "Content-type: text/html"
+    if header:
+        print >>stdout, header
+
+    print >>stdout
+
+
+def err_unencrypted(servername):
+    if servername:
         html = ("<H2>OOPS</H2><b>YOU SHOULD NEVER</b> access ZeroVault "
                 "over a <b>UNENCRYPTED</b> connection!<br>"
                 "Please visit the <A HREF=\"https://" +
                 servername + "/\">HTTPS site</A>!")
     else:
         html = "<H2>OOPS</H2>Broken server setup. No SERVER_NAME set."
-    if "HTTPS" in environ:
-        if "HTTP_COOKIE" in environ:
-            print >>stdout
-            cookie = Cookie.SimpleCookie(environ["HTTP_COOKIE"])
-            rumpelroot = cookie["rumpelroot"].value
-            rumpelsub = base64.b32encode(hmac.new(
-                serversalt,
-                rumpelroot,
-                digestmod=hashlib.sha256).digest()).strip("=")
-            revocationjsonfile = (cwd / ("../revoked/" + rumpelsub + ".json"))
-            revocationlist = []
-            if (revocationjsonfile.exists()):
-                with revocationjsonfile.open(mode='rb') as data_file:
-                    revocationlist = json.load(data_file)
-            form = cgi.FieldStorage()
-            revocekey = "NONE"
-            if "revocationkey" in form:
-                revocekey = form["revocationkey"].value
-                if len(revocekey) == 32:
-                    revocationlist.append(revocekey)
-                    with revocationjsonfile.open(mode='wb') as outfile:
-                        json.dump(revocationlist, outfile)
-            context = {
-                'rumpelroot': rumpelroot,
-                'revocationlist': revocationlist
-            }
-            html = render_template('rumpeltree.html', context)
-        else:
-            form = cgi.FieldStorage()
-            if "password" in form:
-                rumpelroot = base64.b32encode(hmac.new(
-                    serversalt,
-                    msg=form["password"].value,
-                    digestmod=hashlib.sha256).digest()).strip("=")
-                cookie = Cookie.SimpleCookie()
-                cookie["rumpelroot"] = rumpelroot
-                cookie["rumpelroot"]["domain"] = "password.capibara.com"
-                cookie["rumpelroot"]["path"] = "/"
-                expiration = now() + timedelta(days=365 * 20)
-                cookie["rumpelroot"]["expires"] = expiration.strftime(
-                    "%a, %d-%b-%Y %H:%M:%S PST")
-                print >>stdout, cookie.output()
-                print >>stdout
-                context = {
-                  'rumpelroot': rumpelroot
-                }
-                html = render_template('rumpeltree.html', context)
-            else:
-                print >>stdout
-                context = {}
-                html = render_template('passwordform.html', context)
-    else:
-        print >>stdout
-    print >>stdout, html
+    return html
 
 
 class Path(object):
@@ -128,21 +185,23 @@ class Path(object):
 
 
 class MockIO(object):
-    environ = dict(SERVER_NAME='host.example',
-                   HTTPS='1')
-
-    def __init__(self):
+    def __init__(self, stdin=''):
         from io import BytesIO
+        self.stdin = BytesIO(stdin)
         self.stdout = BytesIO()
+        self.existing = {}
+        self._tpl = None
 
     def ops(self):
         from posixpath import abspath, dirname, join as pathjoin
         from io import BytesIO, StringIO
 
         def exists(p):
-            return False
+            return p in self.existing
 
         def io_open(p, mode):
+            if 'w' in mode:
+                self.existing[p] = True
             return BytesIO() if 'b' in mode else StringIO()
         return abspath, dirname, pathjoin, exists, io_open
 
@@ -155,10 +214,11 @@ class MockIO(object):
         return self
 
     def load(self, env, tpl, context):
+        self._tpl = tpl
         return self
 
     def render(self, context):
-        return 'This is your first visit to your ZeroVault'
+        return '... render %s with %s' % (self._tpl, context)
 
 
 if __name__ == '__main__':
@@ -170,11 +230,11 @@ if __name__ == '__main__':
         from io import open as io_open
         from os import environ
         from os.path import abspath, dirname, join as pathjoin, exists
-        from sys import stdout
+        from sys import stdin, stdout
 
         from jinja2 import FileSystemLoader
 
         cwd = Path('.', (abspath, dirname, pathjoin, exists, io_open))
-        main(stdout, environ, cwd, datetime.now, FileSystemLoader)
+        main(stdin, stdout, environ, cwd, datetime.now, FileSystemLoader)
 
     _script()
