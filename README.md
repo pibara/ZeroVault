@@ -15,4 +15,12 @@ The ZeroVault system works with two passphrases:
 
 Zerovault will create secure recreatable passwords from domain username combinations. If desired, ZeroValut can also be used to generate a unique username for a site.
 
-You may install ZeroVault on your own HTTPS web server or use the one on https://password.capibara.com/ if you don't feel the need to run your own instance. If you decide to run your own instance, please edit the file index.cgi and change the line defining a server salt. 
+You may install ZeroVault on your own HTTPS web server or use the one on https://password.capibara.com/ if you don't feel the need to run your own instance. If you decide to run your own instance, take the following steps:
+
+* Clone ZeroVault
+* Configure a (virtual) https server on your web server.
+* Copy index.cgi,vault.jpg and the templates directory to our document root
+* Create a 'revoked' directory one directory up from your document root and make this directory writable for the uuid your server runs under.
+* Edit index.cgi so that your server uses a unique salt
+
+
